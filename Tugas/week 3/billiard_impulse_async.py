@@ -1,16 +1,3 @@
-"""
-billiard_impulse_async_fixed.py
-- CoppeliaSim 4.10.0 + zmqRemoteApi
-- Pakai scene yang SUDAH TERBUKA
-- Mode ASINKRON (tanpa stepping sinkron)
-- Input terminal: gaya (N) & torsi (N·m) dalam KOORDINAT GLOBAL
-- Setiap input = impuls SEKALI (1 langkah dinamika)
-- Target default: 'sphere 6'
-- Skala panjang scene: 1 unit = 0.001 m (mm). Force (N) dipakai langsung; Torque (N·m) dikonversi ke N·unit.
-
-pip install coppeliasim-zmqremoteapi-client
-"""
-
 import argparse
 from typing import List
 
@@ -30,7 +17,6 @@ def connect(host: str, port: int):
     return client, sim
 
 def get_all_dynamic_shapes(sim) -> List[int]:
-    """Enumerasi semua shape di scene (aman untuk 4.10) lalu filter yang dinamis."""
     handles = sim.getObjectsInTree(sim.handle_scene, sim.object_shape_type, 0)  # semua shape
     dyn_shapes = []
     for h in handles:
@@ -43,13 +29,6 @@ def get_all_dynamic_shapes(sim) -> List[int]:
     return dyn_shapes
 
 def find_object_by_name(sim, desired_name: str) -> int:
-    """
-    Cari handle berdasarkan alias:
-      - Coba path absolut: '/<alias>'
-      - Kalau gagal, telusuri semua shape dinamis & samakan nama (case-insensitive)
-      - Jika masih gagal, tampilkan kandidat yang mengandung teks
-    """
-    # 1) Path absolut (paling akurat di 4.x):
     for candidate in (f'/{desired_name}', desired_name):
         try:
             h = sim.getObject(candidate)
@@ -57,13 +36,12 @@ def find_object_by_name(sim, desired_name: str) -> int:
         except Exception:
             pass
 
-    # 2) Enumerasi shape dinamis & cocokkan alias:
     matches_eq = []
     matches_sub = []
     name_l = desired_name.lower()
     for h in get_all_dynamic_shapes(sim):
         try:
-            alias = sim.getObjectAlias(h, 1)  # unique alias
+            alias = sim.getObjectAlias(h, 1) 
         except Exception:
             continue
         if not alias:
@@ -77,10 +55,8 @@ def find_object_by_name(sim, desired_name: str) -> int:
     if matches_eq:
         return matches_eq[0]
     if matches_sub:
-        # Ambil kandidat pertama yang "mengandung" nama
         return matches_sub[0]
 
-    # 3) Kalau benar-benar tidak ketemu, lempar error dengan daftar bola dinamis
     all_dyn = get_all_dynamic_shapes(sim)
     cand = []
     for h in all_dyn:
@@ -118,7 +94,6 @@ def main():
 
     client, sim = connect(args.host, args.port)
 
-    # Pastikan simulasi berjalan (asinkron)
     state = sim.getSimulationState()
     if state == sim.simulation_stopped:
         print("[i] Simulasi belum berjalan. Menjalankan simulasi...")
@@ -126,18 +101,15 @@ def main():
     else:
         print("[i] Simulasi sudah berjalan (asinkron).")
 
-    # Pastikan asinkron (non stepping)
     try:
         sim.setStepping(False)
     except Exception:
         pass
 
-    # Cari target
     try:
         target = find_object_by_name(sim, args.target)
     except RuntimeError as e:
         print(f"(!) {e}")
-        # Opsi tambahan: list semua shape dinamis agar user tahu nama pasti
         print("\n[i] Daftar shape dinamis (untuk referensi):")
         for h in get_all_dynamic_shapes(sim):
             try:
@@ -160,7 +132,6 @@ def main():
 
         force_SI, torque_SI = ask_force_torque_global()
 
-        # Konversi ke unit scene
         force_scene = force_SI[:]  # N apa adanya
         if args.length_scale <= 0:
             torque_scene = torque_SI[:]
@@ -171,7 +142,6 @@ def main():
         print(f"[i] Apply (global): F={force_SI} N, T={torque_SI} N·m "
               f"-> scene torque={torque_scene} N·unit")
 
-        # Impuls satu kali
         sim.addForceAndTorque(target, force_scene, torque_scene)
         print("[i] Impuls dikirim.")
 
